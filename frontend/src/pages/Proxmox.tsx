@@ -316,7 +316,7 @@ export default function Proxmox() {
     <div className="space-y-8">
       <header>
         <h1 className="text-4xl font-bold tracking-tight mb-2">
-          Proxmox <span className="text-muted-foreground">Cluster</span>
+          Proxmox Cluster
         </h1>
         <p className="text-muted-foreground text-lg">
           Estado dos nós, VMs e containers.

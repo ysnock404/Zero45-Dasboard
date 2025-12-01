@@ -3,7 +3,7 @@
 > "Just a cool looking dashboard I made for my homelab. SSH, stats, and vibes."
 
 ![Status](https://img.shields.io/badge/status-WIP%20%2F%20Unstable-red)
-![Version](https://img.shields.io/badge/version-0.0.1--dev-orange)
+![Version](https://img.shields.io/badge/version-0.1.0-orange)
 
 **⚠️ WARNING: THIS IS A WORK IN PROGRESS**
 This project is currently in active development. It is **unstable**, **not feature complete**, and **not ready for production use**. Use at your own risk. Expect bugs, breaking changes, and missing features.
