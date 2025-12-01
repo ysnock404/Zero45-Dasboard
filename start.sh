@@ -1,15 +1,53 @@
 #!/bin/bash
 
-# ysnockserver - Start Script
-# Inicia backend e frontend simultaneamente
+SERVICE_NAME="zero45-dashboard.service"
 
-# Colors
+# Colors (needed even when only printing from systemctl wrapper)
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
+
+print_access_info() {
+    local host_ip
+    host_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    if [ -z "$host_ip" ]; then
+        host_ip=$(hostname -i 2>/dev/null | awk '{print $1}')
+    fi
+    if [ -z "$host_ip" ]; then
+        host_ip="127.0.0.1"
+    fi
+
+    echo -e "${CYAN}📍 URLs:${NC}"
+    echo -e "   Frontend:  ${BLUE}http://localhost:5173${NC}  (${host_ip}:5173)"
+    echo -e "   Backend:   ${BLUE}http://localhost:9031${NC}  (${host_ip}:9031)"
+    echo -e "   Health:    ${BLUE}http://localhost:9031/health${NC}  (${host_ip}:9031/health)"
+    echo ""
+}
+
+# When executed manually, delegate to systemd, then show access info once running.
+if [ -z "${INVOCATION_ID:-}" ]; then
+    if command -v systemctl >/dev/null 2>&1; then
+        echo "[start.sh] Iniciando via systemctl (${SERVICE_NAME})..."
+        if systemctl start "${SERVICE_NAME}"; then
+            echo "[start.sh] Serviço iniciado com sucesso."
+            print_access_info
+            echo "Use 'systemctl status ${SERVICE_NAME}' para ver logs em tempo real."
+            exit 0
+        else
+            echo "[start.sh] Falha ao iniciar o serviço ${SERVICE_NAME}."
+            exit 1
+        fi
+    else
+        echo "[start.sh] systemctl não encontrado; execute via systemd ou export INVOCATION_ID para executar diretamente."
+        exit 1
+    fi
+fi
+
+# ysnockserver - Start Script
+# Inicia backend e frontend simultaneamente
 
 # Banner
 echo -e "${CYAN}"
@@ -238,11 +276,15 @@ echo "════════════════════════�
 echo -e "${GREEN}✅ ysnockserver is running!${NC}"
 echo "════════════════════════════════════════════════════════════"
 echo ""
-echo -e "${CYAN}📍 URLs:${NC}"
-echo -e "   Frontend:  ${BLUE}http://localhost:5173${NC}"
-echo -e "   Backend:   ${BLUE}http://localhost:9031${NC}"
-echo -e "   Health:    ${BLUE}http://localhost:9031/health${NC}"
-echo ""
+HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+if [ -z "$HOST_IP" ]; then
+    HOST_IP=$(hostname -i 2>/dev/null | awk '{print $1}')
+fi
+if [ -z "$HOST_IP" ]; then
+    HOST_IP="127.0.0.1"
+fi
+
+print_access_info
 echo -e "${CYAN}🔐 Login Credentials:${NC}"
 echo -e "   Email:     ${YELLOW}admin@ysnockserver.local${NC}"
 echo -e "   Password:  ${YELLOW}admin${NC}"

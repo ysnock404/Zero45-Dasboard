@@ -24,11 +24,11 @@ Zero45 Dashboard is a personal project to create a unified control center for my
 ## ✨ Features (Planned/In Progress)
 
 ### ✅ Implemented (Kind of)
-- 🔐 **Authentication** - Basic JWT login/register
-- 💻 **SSH Terminal** - Web-based terminal using xterm.js (It works!)
-- 📊 **Dashboard UI** - It looks cool, has some charts
-- ⚙️ **JSON Config** - Easy configuration
-- 📝 **Logging** - Basic logging setup
+- 🖥️ **Proxmox integration** - `/api/proxmox/*` endpoints expose cluster resources, metrics, and power actions for nodes, VMs, and LXC containers
+- 🪟 **RDP manager + Guacamole streaming** - CRUD for saved RDP hosts, tokenized Guacamole bridge, and in-browser viewer with fullscreen/status overlays
+- 💻 **SSH Gateway 2.0** - Persistent SSH sessions with history, reconnection, encryption at rest for secrets, and an improved xterm.js frontend
+- 📈 **Host metrics collector** - Aggregated CPU/memory/disk/network stats plus optional wattage sampling via `systeminformation`
+- 🧠 **Auth / UI Core** - Basic JWT login/register, dashboard shell, JSON config, logging, etc.
 
 ### 🚧 To Do / Broken
 - 🗄️ Database Management
@@ -62,6 +62,22 @@ Zero45 Dashboard is a personal project to create a unified control center for my
 3. **Access**
    - Frontend: http://localhost:5173
    - Backend: http://localhost:3001
+
+## 🛠️ Gerenciamento do Serviço
+
+O Zero45 Dashboard roda como um serviço systemd chamado `zero45-dashboard.service`. Utilize os comandos abaixo para ligar/desligar:
+
+```bash
+sudo systemctl start zero45-dashboard.service     # Inicia frontend e backend
+sudo systemctl stop zero45-dashboard.service      # Para tudo com segurança
+sudo systemctl restart zero45-dashboard.service   # Reinicia aplicando novas configs
+sudo systemctl status zero45-dashboard.service    # Mostra status e últimos logs
+```
+
+- Os logs escritos pelo serviço ficam em `logs/systemd.log` e `logs/systemd.err.log`.
+- Os scripts `./start.sh` e `./stop.sh` continuam sendo usados internamente pelo systemd.
+  - Quando você rodar os scripts manualmente, eles apenas delegam para `systemctl` para manter o estado sincronizado.
+  - Se precisar iniciar/parar fora do systemd por algum motivo especial, rode o serviço via `systemctl` e ele chamará os scripts automaticamente.
 
 ---
 

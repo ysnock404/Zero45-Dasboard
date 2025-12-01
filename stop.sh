@@ -1,5 +1,18 @@
 #!/bin/bash
 
+SERVICE_NAME="zero45-dashboard.service"
+
+# When executed manually, stop the managed systemd unit instead of killing processes directly.
+if [ -z "${INVOCATION_ID:-}" ]; then
+    if command -v systemctl >/dev/null 2>&1; then
+        echo "[stop.sh] Delegating stop to systemctl (${SERVICE_NAME})..."
+        exec systemctl stop "${SERVICE_NAME}"
+    else
+        echo "[stop.sh] systemctl não encontrado; execute via systemd ou export INVOCATION_ID para executar diretamente."
+        exit 1
+    fi
+fi
+
 # ysnockserver - Stop Script
 # Para todos os processos do ysnockserver
 
