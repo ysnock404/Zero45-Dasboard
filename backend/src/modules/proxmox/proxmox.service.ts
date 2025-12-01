@@ -5,10 +5,10 @@ import { logger } from '../../shared/utils/logger';
 import { ProxmoxMetricPoint, ProxmoxResource } from './proxmox.types';
 
 class ProxmoxService {
-    private client: AxiosInstance;
+    private client: AxiosInstance | null = null;
 
     constructor() {
-        this.client = this.createClient();
+        this.recreateClient();
     }
 
     private resolveConfig() {
@@ -35,8 +35,24 @@ class ProxmoxService {
         };
     }
 
+    private authHeader(config: { tokenId: string; tokenSecret: string }) {
+        if (!config.tokenId || !config.tokenSecret || config.tokenSecret === 'replace-with-real-secret') {
+            return null;
+        }
+
+        return `PVEAPIToken=${config.tokenId}=${config.tokenSecret}`;
+    }
+
     private createClient() {
         const proxmox = this.resolveConfig();
+        const authorization = this.authHeader(proxmox);
+
+        if (!authorization) {
+            logger.error(
+                'Proxmox token não configurado. Define PROXMOX_TOKEN_ID e PROXMOX_TOKEN_SECRET ou atualiza backend/config.json.'
+            );
+            return null;
+        }
 
         logger.info(
             `Proxmox client configured for ${proxmox.baseUrl} (verifySsl=${proxmox.verifySsl ? 'true' : 'false'})`
@@ -45,7 +61,7 @@ class ProxmoxService {
         return axios.create({
             baseURL: `${proxmox.baseUrl.replace(/\/+$/, '')}/api2/json`,
             headers: {
-                Authorization: `PVEAPIToken=${proxmox.tokenId}=${proxmox.tokenSecret}`,
+                Authorization: authorization,
             },
             httpsAgent: new https.Agent({
                 rejectUnauthorized: proxmox.verifySsl,
@@ -53,13 +69,44 @@ class ProxmoxService {
         });
     }
 
-    private async get<T>(path: string): Promise<T> {
+    private recreateClient() {
+        this.client = this.createClient();
+    }
+
+    private ensureClient() {
+        if (!this.client) {
+            this.recreateClient();
+        }
+
+        if (!this.client) {
+            const error: any = new Error('Proxmox token not configured');
+            error.response = {
+                status: 401,
+                data: {
+                    message: 'Configura PROXMOX_TOKEN_ID/PROXMOX_TOKEN_SECRET ou backend/config.json',
+                },
+            };
+            throw error;
+        }
+    }
+
+    private async get<T>(path: string, retry = false): Promise<T> {
+        this.ensureClient();
+
         try {
-            const response = await this.client.get(path);
+            const response = await this.client!.get(path);
             return response.data.data as T;
         } catch (error: any) {
+            const status = error?.response?.status;
+
+            if (status === 401 && !retry) {
+                logger.warn('Proxmox respondeu 401, recarregando config e tentando novamente uma vez.');
+                this.recreateClient();
+                return this.get<T>(path, true);
+            }
+
             const reason = error?.response?.data?.errors || error?.message;
-            logger.error(`Proxmox GET ${path} failed`, reason);
+            logger.error(`Proxmox GET ${path} failed`, reason || status || 'unknown error');
             throw error;
         }
     }

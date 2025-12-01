@@ -1,4 +1,6 @@
 import si from 'systeminformation';
+import { exec } from 'child_process';
+import util from 'util';
 
 type NetPrev = { rx: number; tx: number; ts: number };
 type PowerPrev = { energy: number; ts: number };
@@ -6,6 +8,7 @@ type PowerPrev = { energy: number; ts: number };
 class HostService {
     private netPrev: Record<string, NetPrev> = {};
     private powerPrev: PowerPrev | null = null;
+    private execAsync = util.promisify(exec);
 
     private calcNetDelta(current: { iface: string; rx_bytes: number; tx_bytes: number; ts: number }) {
         const prev = this.netPrev[current.iface];
@@ -23,7 +26,31 @@ class HostService {
         return { rx_sec: Math.max(0, rx_sec), tx_sec: Math.max(0, tx_sec) };
     }
 
+    private async readPowerWattsFromCommand() {
+        const command =
+            process.env.HOST_WATTS_COMMAND || process.env.PROXMOX_WATTS_COMMAND || process.env.WATTS_COMMAND;
+        if (!command) return null;
+
+        try {
+            const { stdout } = await this.execAsync(command, { timeout: 2000 });
+            const match = stdout.match(/([0-9]+(?:\.[0-9]+)?)/);
+            if (match) {
+                const watts = parseFloat(match[1]);
+                return Number.isFinite(watts) ? watts : null;
+            }
+        } catch (err) {
+            return null;
+        }
+
+        return null;
+    }
+
     private async readPowerWatts(ts: number) {
+        const fromCommand = await this.readPowerWattsFromCommand();
+        if (fromCommand !== null) {
+            return fromCommand;
+        }
+
         try {
             const energyRaw = await si.power(); // may return null/undefined on some systems
             if (energyRaw?.cpus?.length) {
