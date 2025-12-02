@@ -13,7 +13,7 @@ datasource db {
 // User model - para autenticação
 model User {
   id        String   @id @default(uuid())
-  email     String   @unique
+  username  String   @unique
   password  String   // hashed with bcrypt
   name      String
   role      String   @default("user") // admin, user

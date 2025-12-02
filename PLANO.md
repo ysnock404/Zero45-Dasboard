@@ -106,7 +106,6 @@ Uma aplicação web full-stack que centraliza o controle de toda a tua infraestr
 - **Testes automatizados** de APIs
 - **Mock server** para desenvolvimento
 - **Webhooks receiver**
-- **Rate limiting monitor**
 
 ### 6. Health Monitoring
 - **Status Page** pública/privada
@@ -363,7 +362,6 @@ Opções de continuação:
 
 ### Prioridades de Segurança
 - Nunca armazenar credenciais em plain text
-- Implementar rate limiting em todas as APIs
 - Validação de input rigorosa
 - Sanitização de comandos SSH
 - Audit log de todas as operações críticas
