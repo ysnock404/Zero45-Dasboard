@@ -107,13 +107,26 @@ class Server {
     }
 
     private setupWebSocket(): void {
-        // Authentication middleware for Socket.IO
-        this.io.use((socket, next) => {
-            const token = socket.handshake.auth.token;
+        // ✅ RESOLVED TODO: Authentication middleware for Socket.IO
+        this.io.use(async (socket, next) => {
+            try {
+                const token = socket.handshake.auth.token;
 
-            // TODO: Verify JWT token
-            // For now, allow all connections
-            next();
+                if (!token) {
+                    return next(new Error('Authentication token required'));
+                }
+
+                // Verify JWT token
+                const { authService } = await import('./modules/auth/auth.service');
+                const decoded = authService.verifyAccessToken(token);
+
+                // Attach user data to socket
+                socket.data.user = decoded;
+
+                next();
+            } catch (error) {
+                next(new Error('Authentication failed'));
+            }
         });
 
         this.io.on('connection', (socket) => {

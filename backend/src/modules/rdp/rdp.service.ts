@@ -5,6 +5,7 @@ import net from 'net';
 import { configManager } from '../../shared/config/config';
 import { AppError } from '../../shared/middleware/errorHandler';
 import { logger } from '../../shared/utils/logger';
+import { encrypt, decrypt, isEncrypted } from '../../shared/services/crypto.service';
 
 interface RDPServer {
     id: string;
@@ -79,34 +80,13 @@ class RDPService {
         }
     }
 
-    // Encryption/Decryption helpers
-    private encrypt(text: string): string {
-        const config = configManager.getSSHConfig();
-        const algorithm = 'aes-256-cbc';
-        const key = Buffer.from(config.encryptionKey.padEnd(32, '0').slice(0, 32));
-        const iv = crypto.randomBytes(16);
-
-        const cipher = crypto.createCipheriv(algorithm, key, iv);
-        let encrypted = cipher.update(text, 'utf8', 'hex');
-        encrypted += cipher.final('hex');
-
-        return iv.toString('hex') + ':' + encrypted;
+    // Encryption/Decryption helpers (using centralized crypto service)
+    private encryptField(text: string): string {
+        return encrypt(text);
     }
 
-    private decrypt(text: string): string {
-        const config = configManager.getSSHConfig();
-        const algorithm = 'aes-256-cbc';
-        const key = Buffer.from(config.encryptionKey.padEnd(32, '0').slice(0, 32));
-
-        const parts = text.split(':');
-        const iv = Buffer.from(parts[0], 'hex');
-        const encrypted = parts[1];
-
-        const decipher = crypto.createDecipheriv(algorithm, key, iv);
-        let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-        decrypted += decipher.final('utf8');
-
-        return decrypted;
+    private decryptField(text: string): string {
+        return decrypt(text);
     }
 
     async getServers(): Promise<RDPServer[]> {
@@ -137,7 +117,7 @@ class RDPService {
             host: data.host || '',
             port: data.port || 3389,
             username: data.username || 'Administrator',
-            password: data.password ? this.encrypt(data.password) : undefined,
+            password: data.password ? this.encryptField(data.password) : undefined,
             domain: data.domain || '',
             status: 'offline',
             tags: data.tags || [],
@@ -161,7 +141,7 @@ class RDPService {
         const updated = {
             ...rdpServers[index],
             ...data,
-            password: data.password ? this.encrypt(data.password) : rdpServers[index].password,
+            password: data.password ? this.encryptField(data.password) : rdpServers[index].password,
         };
 
         rdpServers[index] = updated;
@@ -270,7 +250,7 @@ class RDPService {
 
         return {
             username: server.username,
-            password: server.password ? this.decrypt(server.password) : '',
+            password: server.password ? this.decryptField(server.password) : '',
             domain: server.domain,
         };
     }
@@ -295,7 +275,7 @@ class RDPService {
                     hostname: server.host,
                     port: server.port || 3389,
                     username: server.username,
-                    password: server.password ? this.decrypt(server.password) : '',
+                    password: server.password ? this.decryptField(server.password) : '',
                     domain: server.domain || '',
                     // Let guacd negotiate (NLA/TLS/standard)
                     security: 'any',

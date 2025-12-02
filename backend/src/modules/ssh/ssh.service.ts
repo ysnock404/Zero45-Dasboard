@@ -1,5 +1,4 @@
 import { Client } from 'ssh2';
-import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import net from 'net';
@@ -7,6 +6,7 @@ import { Socket } from 'socket.io';
 import { configManager } from '../../shared/config/config';
 import { AppError } from '../../shared/middleware/errorHandler';
 import { logger } from '../../shared/utils/logger';
+import { encrypt, decrypt, isEncrypted } from '../../shared/services/crypto.service';
 
 interface SSHServer {
     id: string;
@@ -89,34 +89,13 @@ class SSHService {
         }
     }
 
-    // Encryption/Decryption helpers
-    private encrypt(text: string): string {
-        const config = configManager.getSSHConfig();
-        const algorithm = 'aes-256-cbc';
-        const key = Buffer.from(config.encryptionKey.padEnd(32, '0').slice(0, 32));
-        const iv = crypto.randomBytes(16);
-
-        const cipher = crypto.createCipheriv(algorithm, key, iv);
-        let encrypted = cipher.update(text, 'utf8', 'hex');
-        encrypted += cipher.final('hex');
-
-        return iv.toString('hex') + ':' + encrypted;
+    // Encryption/Decryption helpers (using centralized crypto service)
+    private encryptField(text: string): string {
+        return encrypt(text);
     }
 
-    private decrypt(text: string): string {
-        const config = configManager.getSSHConfig();
-        const algorithm = 'aes-256-cbc';
-        const key = Buffer.from(config.encryptionKey.padEnd(32, '0').slice(0, 32));
-
-        const parts = text.split(':');
-        const iv = Buffer.from(parts[0], 'hex');
-        const encrypted = parts[1];
-
-        const decipher = crypto.createDecipheriv(algorithm, key, iv);
-        let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-        decrypted += decipher.final('utf8');
-
-        return decrypted;
+    private decryptField(text: string): string {
+        return decrypt(text);
     }
 
     async getServers(): Promise<SSHServer[]> {
@@ -149,8 +128,8 @@ class SSHService {
             host: data.host || '',
             port: data.port || 22,
             username: data.username || 'root',
-            password: data.password ? this.encrypt(data.password) : undefined,
-            privateKey: data.privateKey ? this.encrypt(data.privateKey) : undefined,
+            password: data.password ? this.encryptField(data.password) : undefined,
+            privateKey: data.privateKey ? this.encryptField(data.privateKey) : undefined,
             status: 'offline',
             tags: data.tags || [],
         };
@@ -174,8 +153,8 @@ class SSHService {
         const updated = {
             ...mockServers[index],
             ...data,
-            password: data.password ? this.encrypt(data.password) : mockServers[index].password,
-            privateKey: data.privateKey ? this.encrypt(data.privateKey) : mockServers[index].privateKey,
+            password: data.password ? this.encryptField(data.password) : mockServers[index].password,
+            privateKey: data.privateKey ? this.encryptField(data.privateKey) : mockServers[index].privateKey,
         };
 
         mockServers[index] = updated;
@@ -284,8 +263,8 @@ class SSHService {
                     host: server.host,
                     port: server.port,
                     username: server.username,
-                    password: server.password ? this.decrypt(server.password) : undefined,
-                    privateKey: server.privateKey ? this.decrypt(server.privateKey) : undefined,
+                    password: server.password ? this.decryptField(server.password) : undefined,
+                    privateKey: server.privateKey ? this.decryptField(server.privateKey) : undefined,
                     readyTimeout: config.connectionTimeout,
                     keepaliveInterval: config.keepaliveInterval,
                 });

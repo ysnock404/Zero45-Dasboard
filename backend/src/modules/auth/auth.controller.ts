@@ -34,36 +34,6 @@ class AuthController {
         }
     }
 
-    async register(req: Request, res: Response) {
-        try {
-            const { email, password, name } = req.body;
-
-            if (!email || !password || !name) {
-                throw new AppError('Email, password, and name are required', 400);
-            }
-
-            const result = await authService.register(email, password, name);
-
-            logger.info(`New user registered: ${email}`);
-
-            res.status(201).json({
-                status: 'success',
-                data: result,
-            });
-        } catch (error) {
-            if (error instanceof AppError) {
-                return res.status(error.statusCode).json({
-                    status: 'error',
-                    message: error.message,
-                });
-            }
-            res.status(500).json({
-                status: 'error',
-                message: 'Internal server error',
-            });
-        }
-    }
-
     async refreshToken(req: Request, res: Response) {
         try {
             const { refreshToken } = req.body;
@@ -94,17 +64,26 @@ class AuthController {
 
     async getMe(req: Request, res: Response) {
         try {
-            // TODO: Get user from JWT token
+            // ✅ RESOLVED TODO: Get user from JWT token
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                throw new AppError('No token provided', 401);
+            }
+
+            const token = authHeader.split(' ')[1];
+            const user = await authService.getUserFromToken(token);
+
             res.json({
                 status: 'success',
-                data: {
-                    id: 1,
-                    email: 'admin@ysnockserver.local',
-                    name: 'Admin User',
-                    role: 'admin',
-                },
+                data: user,
             });
         } catch (error) {
+            if (error instanceof AppError) {
+                return res.status(error.statusCode).json({
+                    status: 'error',
+                    message: error.message,
+                });
+            }
             res.status(500).json({
                 status: 'error',
                 message: 'Internal server error',
@@ -114,7 +93,15 @@ class AuthController {
 
     async logout(req: Request, res: Response) {
         try {
-            // TODO: Invalidate token
+            // ✅ RESOLVED TODO: Invalidate token
+            const authHeader = req.headers.authorization;
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                throw new AppError('No token provided', 401);
+            }
+
+            const token = authHeader.split(' ')[1];
+            await authService.logout(token);
+
             logger.info('User logged out');
 
             res.json({
@@ -122,6 +109,12 @@ class AuthController {
                 message: 'Logged out successfully',
             });
         } catch (error) {
+            if (error instanceof AppError) {
+                return res.status(error.statusCode).json({
+                    status: 'error',
+                    message: error.message,
+                });
+            }
             res.status(500).json({
                 status: 'error',
                 message: 'Internal server error',

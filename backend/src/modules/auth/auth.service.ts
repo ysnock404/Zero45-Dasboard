@@ -1,50 +1,67 @@
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { configManager } from '../../shared/config/config';
+import { prisma } from '../../shared/services/prisma.service';
+import { redisService } from '../../shared/services/redis.service';
 import { AppError } from '../../shared/middleware/errorHandler';
+import { logger } from '../../shared/utils/logger';
 
-// Mock user database (will be replaced with Prisma)
-const mockUsers = [
-    {
-        id: 1,
-        email: 'admin@ysnockserver.local',
-        password: '$2b$10$YourHashedPasswordHere', // Will be hashed properly
-        name: 'Admin User',
-        role: 'admin',
-    },
-];
+interface JWTPayload {
+    userId: string;
+    email: string;
+    role: string;
+}
 
 class AuthService {
-    async login(email: string, password: string) {
-        const config = configManager.getAuthConfig();
+    private readonly JWT_SECRET: string = process.env.JWT_SECRET || 'default-secret-change-me';
+    private readonly JWT_REFRESH_SECRET: string = process.env.JWT_REFRESH_SECRET || 'default-refresh-secret-change-me';
+    private readonly JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '15m';
+    private readonly JWT_REFRESH_EXPIRES_IN: string = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
 
-        // Find user (mock)
-        const user = mockUsers.find((u) => u.email === email);
+    /**
+     * Login user
+     */
+    async login(email: string, password: string) {
+        // Find user by email
+        const user = await prisma.user.findUnique({
+            where: { email },
+        });
 
         if (!user) {
             throw new AppError('Invalid credentials', 401);
         }
 
-        // For demo purposes, accept "admin" as password
-        const isValidPassword = password === 'admin';
-        // In production: await bcrypt.compare(password, user.password);
-
-        if (!isValidPassword) {
+        // Verify password
+        const isPasswordValid = await bcrypt.compare(password, user.password);
+        if (!isPasswordValid) {
             throw new AppError('Invalid credentials', 401);
         }
 
         // Generate tokens
-        const accessToken = jwt.sign(
-            { userId: user.id, email: user.email, role: user.role },
-            config.jwtSecret,
-            { expiresIn: config.jwtExpiresIn }
-        );
+        const accessToken = this.generateAccessToken(user.id, user.email, user.role);
+        const refreshToken = this.generateRefreshToken(user.id);
 
-        const refreshToken = jwt.sign(
-            { userId: user.id },
-            config.jwtRefreshSecret,
-            { expiresIn: config.jwtRefreshExpiresIn }
-        );
+        // Save refresh token to database
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+
+        await prisma.refreshToken.create({
+            data: {
+                token: refreshToken,
+                userId: user.id,
+                expiresAt,
+            },
+        });
+
+        // Create session
+        await prisma.session.create({
+            data: {
+                userId: user.id,
+                token: accessToken,
+                expiresAt: this.getExpirationDate(this.JWT_EXPIRES_IN),
+            },
+        });
+
+        logger.info(`User logged in: ${user.email}`);
 
         return {
             user: {
@@ -52,85 +69,218 @@ class AuthService {
                 email: user.email,
                 name: user.name,
                 role: user.role,
+                avatar: user.avatar,
             },
             accessToken,
             refreshToken,
         };
     }
 
-    async register(email: string, password: string, name: string) {
-        const config = configManager.getAuthConfig();
-
-        // Check if user exists
-        const existingUser = mockUsers.find((u) => u.email === email);
-        if (existingUser) {
-            throw new AppError('User already exists', 400);
-        }
-
-        // Hash password
-        const hashedPassword = await bcrypt.hash(password, config.bcryptRounds);
-
-        // Create user (mock)
-        const newUser = {
-            id: mockUsers.length + 1,
-            email,
-            password: hashedPassword,
-            name,
-            role: 'user' as const,
-        };
-
-        mockUsers.push(newUser);
-
-        // Generate tokens
-        const accessToken = jwt.sign(
-            { userId: newUser.id, email: newUser.email, role: newUser.role },
-            config.jwtSecret,
-            { expiresIn: config.jwtExpiresIn }
-        );
-
-        const refreshToken = jwt.sign(
-            { userId: newUser.id },
-            config.jwtRefreshSecret,
-            { expiresIn: config.jwtRefreshExpiresIn }
-        );
-
-        return {
-            user: {
-                id: newUser.id,
-                email: newUser.email,
-                name: newUser.name,
-                role: newUser.role,
-            },
-            accessToken,
-            refreshToken,
-        };
-    }
-
+    /**
+     * Refresh access token
+     */
     async refreshToken(refreshToken: string) {
-        const config = configManager.getAuthConfig();
-
         try {
-            const decoded = jwt.verify(refreshToken, config.jwtRefreshSecret) as {
-                userId: number;
-            };
+            // Verify refresh token
+            const decoded = jwt.verify(refreshToken, this.JWT_REFRESH_SECRET) as JWTPayload;
 
-            const user = mockUsers.find((u) => u.id === decoded.userId);
-            if (!user) {
-                throw new AppError('User not found', 404);
+            // Check if refresh token exists in database
+            const storedToken = await prisma.refreshToken.findUnique({
+                where: { token: refreshToken },
+                include: { user: true },
+            });
+
+            if (!storedToken) {
+                throw new AppError('Invalid refresh token', 401);
+            }
+
+            // Check if expired
+            if (storedToken.expiresAt < new Date()) {
+                // Delete expired token
+                await prisma.refreshToken.delete({
+                    where: { id: storedToken.id },
+                });
+                throw new AppError('Refresh token expired', 401);
             }
 
             // Generate new access token
-            const accessToken = jwt.sign(
-                { userId: user.id, email: user.email, role: user.role },
-                config.jwtSecret,
-                { expiresIn: config.jwtExpiresIn }
+            const accessToken = this.generateAccessToken(
+                storedToken.user.id,
+                storedToken.user.email,
+                storedToken.user.role
             );
+
+            // Create new session
+            await prisma.session.create({
+                data: {
+                    userId: storedToken.user.id,
+                    token: accessToken,
+                    expiresAt: this.getExpirationDate(this.JWT_EXPIRES_IN),
+                },
+            });
 
             return {
                 accessToken,
             };
         } catch (error) {
-            throw new AppError('Invalid refresh token', 401);
+            if (error instanceof jwt.JsonWebTokenError) {
+                throw new AppError('Invalid refresh token', 401);
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Logout user
+     */
+    async logout(token: string) {
+        try {
+            // Verify token
+            const decoded = this.verifyAccessToken(token);
+
+            // Add token to blacklist in Redis (if available)
+            if (redisService.isReady()) {
+                const expirationSeconds = this.getSecondsUntilExpiration(this.JWT_EXPIRES_IN);
+                await redisService.sadd('token:blacklist', token);
+                await redisService.expire('token:blacklist', expirationSeconds);
+            }
+
+            // Delete session from database
+            await prisma.session.deleteMany({
+                where: {
+                    token,
+                    userId: decoded.userId,
+                },
+            });
+
+            // Delete all refresh tokens for this user (optional - logout from all devices)
+            // await prisma.refreshToken.deleteMany({ where: { userId: decoded.userId } });
+
+            logger.info(`User logged out: ${decoded.email}`);
+        } catch (error) {
+            // Even if token is invalid, try to clean up
+            logger.warn('Logout with invalid/expired token');
+        }
+    }
+
+    /**
+     * Get user from JWT token
+     */
+    async getUserFromToken(token: string) {
+        // Check if token is blacklisted
+        if (redisService.isReady()) {
+            const isBlacklisted = await redisService.sismember('token:blacklist', token);
+            if (isBlacklisted) {
+                throw new AppError('Token has been revoked', 401);
+            }
+        }
+
+        // Verify token
+        const decoded = this.verifyAccessToken(token);
+
+        // Get user from database
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.userId },
+            select: {
+                id: true,
+                email: true,
+                name: true,
+                role: true,
+                avatar: true,
+                createdAt: true,
+            },
+        });
+
+        if (!user) {
+            throw new AppError('User not found', 404);
+        }
+
+        return user;
+    }
+
+    /**
+     * Generate access token (JWT)
+     */
+    private generateAccessToken(userId: string, email: string, role: string): string {
+        const payload: JWTPayload = {
+            userId,
+            email,
+            role,
+        };
+
+        return jwt.sign(payload, this.JWT_SECRET, {
+            expiresIn: this.JWT_EXPIRES_IN,
+        });
+    }
+
+    /**
+     * Generate refresh token (JWT)
+     */
+    private generateRefreshToken(userId: string): string {
+        const payload = { userId };
+
+        return jwt.sign(payload, this.JWT_REFRESH_SECRET, {
+            expiresIn: this.JWT_REFRESH_EXPIRES_IN,
+        });
+    }
+
+    /**
+     * Verify access token
+     */
+    verifyAccessToken(token: string): JWTPayload {
+        try {
+            return jwt.verify(token, this.JWT_SECRET) as JWTPayload;
+        } catch (error) {
+            if (error instanceof jwt.TokenExpiredError) {
+                throw new AppError('Token expired', 401);
+            }
+            if (error instanceof jwt.JsonWebTokenError) {
+                throw new AppError('Invalid token', 401);
+            }
+            throw new AppError('Token verification failed', 401);
+        }
+    }
+
+    /**
+     * Hash password
+     */
+    async hashPassword(password: string): Promise<string> {
+        return bcrypt.hash(password, 10);
+    }
+
+    /**
+     * Get expiration date from duration string (15m, 7d, etc)
+     */
+    private getExpirationDate(duration: string): Date {
+        const seconds = this.getSecondsUntilExpiration(duration);
+        const date = new Date();
+        date.setSeconds(date.getSeconds() + seconds);
+        return date;
+    }
+
+    /**
+     * Get seconds from duration string
+     */
+    private getSecondsUntilExpiration(duration: string): number {
+        const match = duration.match(/^(\d+)([smhd])$/);
+        if (!match) {
+            return 900; // Default 15 minutes
+        }
+
+        const value = parseInt(match[1]);
+        const unit = match[2];
+
+        switch (unit) {
+            case 's':
+                return value;
+            case 'm':
+                return value * 60;
+            case 'h':
+                return value * 60 * 60;
+            case 'd':
+                return value * 60 * 60 * 24;
+            default:
+                return 900;
         }
     }
 }

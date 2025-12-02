@@ -33,6 +33,10 @@ Thumbs.db
 # Prisma
 prisma/migrations/*
 !prisma/migrations/.gitkeep
+prisma/*.db
+prisma/*.db-journal
+*.db
+*.db-journal
 
 # Testing
 coverage/

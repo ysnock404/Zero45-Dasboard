@@ -102,7 +102,7 @@ class HostService {
 
         // Try IPMI (common on servers)
         try {
-            const { stdout } = await this.execAsync('ipmitool', ['sdr'], { timeout: 2000 });
+            const { stdout } = await this.execAsync('ipmitool sdr', { timeout: 2000 });
             const match = stdout.match(/([0-9]+(?:\.[0-9]+)?)\s*Watts/i);
             if (match) {
                 const watts = parseFloat(match[1]);
@@ -112,15 +112,8 @@ class HostService {
             // ignore and continue
         }
 
-        try {
-            const energyRaw = await si.power(); // may return null/undefined on some systems
-            if (energyRaw?.cpus?.length) {
-                const avg = energyRaw.cpus.reduce((acc, c) => acc + (c.power || 0), 0) / energyRaw.cpus.length;
-                if (avg > 0) return avg;
-            }
-        } catch (err) {
-            return null;
-        }
+        // Power consumption API not available in systeminformation
+        return null;
     }
 
     private async readLsblk() {

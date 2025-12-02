@@ -228,6 +228,7 @@ class ProxmoxService {
             return this.pveCli(`/nodes/${encodeURIComponent(node)}/qemu/${vmid}/status/start`, {}, 'create');
         }
         this.ensureClient();
+        if (!this.client) throw new Error('Proxmox client not available');
         const response = await this.client.post(`/nodes/${encodeURIComponent(node)}/qemu/${vmid}/status/start`);
         return response.data.data;
     }
@@ -237,6 +238,7 @@ class ProxmoxService {
             return this.pveCli(`/nodes/${encodeURIComponent(node)}/qemu/${vmid}/status/stop`, {}, 'create');
         }
         this.ensureClient();
+        if (!this.client) throw new Error('Proxmox client not available');
         const response = await this.client.post(`/nodes/${encodeURIComponent(node)}/qemu/${vmid}/status/stop`);
         return response.data.data;
     }
@@ -246,6 +248,7 @@ class ProxmoxService {
             return this.pveCli(`/nodes/${encodeURIComponent(node)}/qemu/${vmid}/status/reboot`, {}, 'create');
         }
         this.ensureClient();
+        if (!this.client) throw new Error('Proxmox client not available');
         const response = await this.client.post(`/nodes/${encodeURIComponent(node)}/qemu/${vmid}/status/reboot`);
         return response.data.data;
     }
@@ -255,6 +258,7 @@ class ProxmoxService {
             return this.pveCli(`/nodes/${encodeURIComponent(node)}/lxc/${vmid}/status/start`, {}, 'create');
         }
         this.ensureClient();
+        if (!this.client) throw new Error('Proxmox client not available');
         const response = await this.client.post(`/nodes/${encodeURIComponent(node)}/lxc/${vmid}/status/start`);
         return response.data.data;
     }
@@ -264,6 +268,7 @@ class ProxmoxService {
             return this.pveCli(`/nodes/${encodeURIComponent(node)}/lxc/${vmid}/status/stop`, {}, 'create');
         }
         this.ensureClient();
+        if (!this.client) throw new Error('Proxmox client not available');
         const response = await this.client.post(`/nodes/${encodeURIComponent(node)}/lxc/${vmid}/status/stop`);
         return response.data.data;
     }
@@ -273,6 +278,7 @@ class ProxmoxService {
             return this.pveCli(`/nodes/${encodeURIComponent(node)}/lxc/${vmid}/status/reboot`, {}, 'create');
         }
         this.ensureClient();
+        if (!this.client) throw new Error('Proxmox client not available');
         const response = await this.client.post(`/nodes/${encodeURIComponent(node)}/lxc/${vmid}/status/reboot`);
         return response.data.data;
     }
