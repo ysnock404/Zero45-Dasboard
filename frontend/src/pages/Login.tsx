@@ -11,7 +11,7 @@ import { useAuthStore } from "@/stores/authStore"
 export default function Login() {
   const navigate = useNavigate()
   const login = useAuthStore((state) => state.login)
-  const [email, setEmail] = useState("")
+  const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -22,12 +22,12 @@ export default function Login() {
     setError("")
     setLoading(true)
 
-    const success = await login(email, password)
+    const success = await login(username, password)
 
     if (success) {
       navigate("/")
     } else {
-      setError("Email ou password incorretos")
+      setError("Username ou password incorretos")
     }
     setLoading(false)
   }
@@ -60,13 +60,13 @@ export default function Login() {
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="username">Username</Label>
             <Input
-              id="email"
-              type="email"
-              placeholder="admin@ysnockserver.local"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="username"
+              type="text"
+              placeholder="admin"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               required
               className="bg-white/5 border-white/10 focus:border-primary"
             />
@@ -125,9 +125,9 @@ export default function Login() {
 
         {/* Demo Credentials */}
         <div className="mt-6 p-4 rounded-lg bg-white/5 border border-white/10">
-          <p className="text-xs text-muted-foreground text-center mb-2">Demo credentials:</p>
+          <p className="text-xs text-muted-foreground text-center mb-2">Admin credentials:</p>
           <p className="text-xs text-center font-mono">
-            <span className="text-primary">admin@ysnockserver.local</span> / <span className="text-primary">admin</span>
+            <span className="text-primary">admin</span> / <span className="text-primary">admin123</span>
           </p>
         </div>
       </div>

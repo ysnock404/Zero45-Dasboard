@@ -7,7 +7,7 @@ import { logger } from '../../shared/utils/logger';
 
 interface JWTPayload {
     userId: string;
-    email: string;
+    username: string;
     role: string;
 }
 
@@ -20,10 +20,10 @@ class AuthService {
     /**
      * Login user
      */
-    async login(email: string, password: string) {
-        // Find user by email
+    async login(username: string, password: string) {
+        // Find user by username
         const user = await prisma.user.findUnique({
-            where: { email },
+            where: { username },
         });
 
         if (!user) {
@@ -37,7 +37,7 @@ class AuthService {
         }
 
         // Generate tokens
-        const accessToken = this.generateAccessToken(user.id, user.email, user.role);
+        const accessToken = this.generateAccessToken(user.id, user.username, user.role);
         const refreshToken = this.generateRefreshToken(user.id);
 
         // Save refresh token to database
@@ -61,12 +61,12 @@ class AuthService {
             },
         });
 
-        logger.info(`User logged in: ${user.email}`);
+        logger.info(`User logged in: ${user.username}`);
 
         return {
             user: {
                 id: user.id,
-                email: user.email,
+                username: user.username,
                 name: user.name,
                 role: user.role,
                 avatar: user.avatar,
@@ -106,7 +106,7 @@ class AuthService {
             // Generate new access token
             const accessToken = this.generateAccessToken(
                 storedToken.user.id,
-                storedToken.user.email,
+                storedToken.user.username,
                 storedToken.user.role
             );
 
@@ -156,7 +156,7 @@ class AuthService {
             // Delete all refresh tokens for this user (optional - logout from all devices)
             // await prisma.refreshToken.deleteMany({ where: { userId: decoded.userId } });
 
-            logger.info(`User logged out: ${decoded.email}`);
+            logger.info(`User logged out: ${decoded.username}`);
         } catch (error) {
             // Even if token is invalid, try to clean up
             logger.warn('Logout with invalid/expired token');
@@ -183,7 +183,7 @@ class AuthService {
             where: { id: decoded.userId },
             select: {
                 id: true,
-                email: true,
+                username: true,
                 name: true,
                 role: true,
                 avatar: true,
@@ -201,10 +201,10 @@ class AuthService {
     /**
      * Generate access token (JWT)
      */
-    private generateAccessToken(userId: string, email: string, role: string): string {
+    private generateAccessToken(userId: string, username: string, role: string): string {
         const payload: JWTPayload = {
             userId,
-            email,
+            username,
             role,
         };
 

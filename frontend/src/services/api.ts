@@ -16,12 +16,59 @@ apiClient.interceptors.request.use((config) => {
     const authStore = localStorage.getItem('auth-storage');
     if (authStore) {
         const { state } = JSON.parse(authStore);
-        if (state?.token) {
-            config.headers.Authorization = `Bearer ${state.token}`;
+        if (state?.accessToken) {
+            config.headers.Authorization = `Bearer ${state.accessToken}`;
         }
     }
     return config;
 });
+
+// Handle token refresh on 401 errors
+apiClient.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+        const originalRequest = error.config;
+
+        // If error is 401 and we haven't retried yet
+        if (error.response?.status === 401 && !originalRequest._retry) {
+            originalRequest._retry = true;
+
+            const authStore = localStorage.getItem('auth-storage');
+            if (authStore) {
+                const { state } = JSON.parse(authStore);
+                if (state?.refreshToken) {
+                    try {
+                        // Try to refresh the token
+                        const response = await apiClient.post('/auth/refresh', {
+                            refreshToken: state.refreshToken,
+                        });
+
+                        const { accessToken } = response.data.data;
+
+                        // Update stored access token
+                        state.accessToken = accessToken;
+                        localStorage.setItem('auth-storage', JSON.stringify({ state }));
+
+                        // Retry original request with new token
+                        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+                        return apiClient(originalRequest);
+                    } catch (refreshError) {
+                        // Refresh failed, clear auth and redirect to login
+                        localStorage.removeItem('auth-storage');
+                        window.location.href = '/login';
+                        return Promise.reject(refreshError);
+                    }
+                }
+            }
+
+            // No refresh token, redirect to login
+            localStorage.removeItem('auth-storage');
+            window.location.href = '/login';
+        }
+
+        return Promise.reject(error);
+    }
+);
 
 // SSH API
 export const sshApi = {
@@ -206,13 +253,8 @@ export const hostApi = {
 
 // Auth API
 export const authApi = {
-    login: async (email: string, password: string) => {
-        const response = await apiClient.post('/auth/login', { email, password });
-        return response.data.data;
-    },
-
-    register: async (email: string, password: string, name: string) => {
-        const response = await apiClient.post('/auth/register', { email, password, name });
+    login: async (username: string, password: string) => {
+        const response = await apiClient.post('/auth/login', { username, password });
         return response.data.data;
     },
 

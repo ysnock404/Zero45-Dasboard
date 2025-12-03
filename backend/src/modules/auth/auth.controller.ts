@@ -6,15 +6,15 @@ import { logger } from '../../shared/utils/logger';
 class AuthController {
     async login(req: Request, res: Response) {
         try {
-            const { email, password } = req.body;
+            const { username, password } = req.body;
 
-            if (!email || !password) {
-                throw new AppError('Email and password are required', 400);
+            if (!username || !password) {
+                throw new AppError('Username and password are required', 400);
             }
 
-            const result = await authService.login(email, password);
+            const result = await authService.login(username, password);
 
-            logger.info(`User logged in: ${email}`);
+            logger.info(`User logged in: ${username}`);
 
             res.json({
                 status: 'success',
